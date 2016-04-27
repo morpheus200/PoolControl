@@ -30,11 +30,22 @@
   PIN 6       Port 6
   PIN 7       Port 7
   PIN 8       Port 8
+  
+  PH-Sensor
+  GND        GND
+  VCC        5V
+  Data       Pin A0
+  
 */
 
 /*
    *************************DECLARATIONS****************
 */
+
+/*    PH-Sensor */
+#define PHSensorPin 0
+
+
 
 /*
       1-Wire
@@ -47,12 +58,11 @@ DallasTemperature sensorTemp(&oneWireTemp);
 */
 
 uint8_t mac[] = {0x90, 0xFF, 0xFF, 0x00, 0xA1, 0xAE}; //Change 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED
-//static byte gwip[] = {192, 168, 177, 1}; //Gateway adresse
-IPAddress ip (192, 168, 177, 178);
+IPAddress ip (192, 168, 177, 178); //Adresse des Arduino
 static int localPort = 8888;      // local port to listen on
 
 IPAddress loxone(192, 168, 177, 13);//Anpassen auf Loxone
-static int loxonePort = 7000;
+static int loxonePort = 7000; //Port der Loxone
 
 // An EthernetUDP instance to let us send and receive packets over UDP
 EthernetUDP udp;
@@ -62,23 +72,22 @@ EthernetUDP udp;
 //******************************Constants**************************
 
 //*****************************Globale Variables***************************
-byte relaisStatus = B00000000;
-int poolTemp = 0;
-int poolTempBuffer = 0;
+byte relaisStatus = B00000000;  //Erststatus der Relais
+int poolTemp, poolTempBuffer = 0;  //Pool Temperatur als Int
 int sekunden = 600;
-char onewire_pool_char[4];
-bool firstRunTemp = true;
-bool firstRunRelais = true;
+char onewire_pool_char[4];  //Pool Temperatur Char
+unsigned long int avgPHValue;   //Durchschnittlicher PH-Wert
+float phValue;  //PH-Wert
+bool firstRunTemp = true;  //FÜr den ersten durchgang
+bool firstRunRelais = true;  //Für den ersten durchgang
 bool tempSend = false;
-bool relaisSend = false;
-bool tempChange = false;
-bool relaisChange = false;
+bool relaisSend = false; //Zeigt an ob Wert gesendet wurde
+bool tempChange = false; //Zeigt an wenn Temperatur sich geändert hat
+bool relaisChange = false; //Zeigt an ob ein Relais geschaltet wurde
 bool initUDPState = false;
+bool lockState = false; // Soll verhindern, dass mehrfaches senden die Relays "irritiert"
 
-
-
-
-
+/******************** SETUP *******************/
 void setup() {
   //Start Serial-Monitor
   Serial.begin(9600);
@@ -87,6 +96,7 @@ void setup() {
   Ethernet.begin(mac, ip);
   Serial.println("Ethernet initiated");
 
+// Setzen der Digitalen Ausgänge
   pinMode(8, OUTPUT);
   digitalWrite(8, HIGH);
   pinMode(7, OUTPUT);
@@ -114,11 +124,40 @@ void setup() {
 
 //*****************************Helpers*********************
 
+// Zum Messen des PH-Wertes
+void phMessen()
+{
+  int buf[10], temp;
+  for(int i=0;i<10;i++)       //Get 10 sample value from the sensor for smooth the value
+  { 
+    buf[i]=analogRead(PHSensorPin); //Lesen des Sensor Pins
+    delay(10);
+  }
+  for(int i=0;i<9;i++)        //sort the analog from small to large
+  {
+    for(int j=i+1;j<10;j++)
+    {
+      if(buf[i]>buf[j])
+      {
+        temp=buf[i];
+        buf[i]=buf[j];
+        buf[j]=temp;
+      }
+    }
+  }
+  avgPHValue=0;
+  for(int i=2;i<8;i++)                      //take the average value of 6 center sample
+    avgPHValue+=buf[i];
+  phValue=(float)avgPHValue*5.0/1024/6; //convert the analog into millivolt
+  phValue=3.5*phValue;                      //convert the millivolt into pH value
+}
+
+
 void timer()
 {
-	Serial.println("Timer");
-	sendTemp();
-	sendRelais();
+  Serial.println("Timer");
+  sendTemp();
+  sendRelais();
 }
 
 //Schalten der Relais anhan des Byte-Wertes (Byte-Stelle 0= arduino Port 1 Byte-Stelle 7 = Arduino Port 8)
@@ -268,6 +307,7 @@ bool sendRelais()
   if (ergebniss > 0)
   {
     udp.stop();
+    lockState = false;
     return true;
   }
 
@@ -275,6 +315,19 @@ bool sendRelais()
   return false;
 }
 
+// Testet ob eine Zahl gesedet wird, für das Schalten der Relais
+int verify(char * string)
+{
+    int x = 0;
+    int len = strlen(string);
+    while(x < len) {
+           if(!isdigit(*(string+x)))
+           return 1;
+           ++x;
+    }
+
+    return 0;
+}
 
 //Lesen des UDP Streams
 void readUDP()
@@ -290,13 +343,17 @@ void readUDP()
     udp.stop();
     Serial.print("received: ");
     Serial.println(packetBuffer);
-    int relais = atoi(packetBuffer);
-    relais--;
-    //passt den zähler an byte an
-    Serial.print("INT: ");
-    Serial.println(relais);
-    relaisByteWriter(relais);
-    relaisSwitch();
+
+    if (verify(packetBuffer) && !lockState)
+    {
+      int relais = atoi(packetBuffer);
+      relais--;
+      //passt den zähler an byte an
+      Serial.print("INT: ");
+      Serial.println(relais);
+      relaisByteWriter(relais);
+      relaisSwitch();
+    }  
   }
   else
   {
