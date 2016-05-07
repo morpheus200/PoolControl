@@ -1,7 +1,8 @@
+
 #include <UIPEthernet.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
-#include <TimerOne.h>
+#include <Timer.h>
 
 /*
    ******************PINBELEGUNG********************
@@ -18,7 +19,7 @@
   1-Wire
   PIN  9      LCK Latch Innensensor       (use pullup 4,5K) Gelbes Kabel
   GND         GND   weißes Kabel
-  VIN         5V    orangenes Kabel
+  VCC         5V    orangenes Kabel
 
   Relais
 
@@ -30,12 +31,12 @@
   PIN 6       Port 6
   PIN 7       Port 7
   PIN 8       Port 8
-  
+
   PH-Sensor
   GND        GND
   VCC        5V
   Data       Pin A0
-  
+
 */
 
 /*
@@ -52,32 +53,32 @@
 */
 OneWire  oneWireTemp(9);
 DallasTemperature sensorTemp(&oneWireTemp);
-
+DeviceAddress poolProbe = {0x28, 0xFF, 0x35, 0x3B, 0x93, 0x15, 0x03, 0xFF};
+DeviceAddress plattenProbe ={0x28, 0xFF, 0x46, 0xFC, 0x4C, 0x04, 0x00, 0xEF};
 /*
     Ethernet Shield
 */
 
-uint8_t mac[] = {0x90, 0xFF, 0xFF, 0x00, 0xA1, 0xAE}; //Change 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED
-IPAddress ip (192, 168, 177, 178); //Adresse des Arduino
-static int localPort = 8888;      // local port to listen on
+const /*PROGMEM*/ uint8_t mac[] = {0x90, 0xFF, 0xFF, 0x00, 0xA1, 0xAE}; //Change 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED
+const /*PROGMEM*/ IPAddress ip (192, 168, 177, 178); //Adresse des Arduino
+const /*PROGMEM*/ int localPort = 8888;      // local port to listen on
 
-IPAddress loxone(192, 168, 177, 13);//Anpassen auf Loxone
-static int loxonePort = 7000; //Port der Loxone
+const /*PROGMEM*/ IPAddress loxone(192, 168, 177, 13);//Anpassen auf Loxone
+const /*PROGMEM*/ int loxonePort = 7000; //Port der Loxone
 
 // An EthernetUDP instance to let us send and receive packets over UDP
 EthernetUDP udp;
 
-
+Timer time;
 
 //******************************Constants**************************
 
 //*****************************Globale Variables***************************
 byte relaisStatus = B00000000;  //Erststatus der Relais
-int poolTemp, poolTempBuffer = 0;  //Pool Temperatur als Int
-int sekunden = 600;
+int poolTemp, poolTempBuffer, plattenTemp, plattenTempBuffer = 0;  //Pool Temperatur als Int
+//uint8_t sekunden = 600;
 char onewire_pool_char[4];  //Pool Temperatur Char
-unsigned long int avgPHValue;   //Durchschnittlicher PH-Wert
-float phValue;  //PH-Wert
+char onewire_platten_char[4]; // Platten Temperatur char
 bool firstRunTemp = true;  //FÜr den ersten durchgang
 bool firstRunRelais = true;  //Für den ersten durchgang
 bool tempSend = false;
@@ -94,9 +95,9 @@ void setup() {
 
   // start the Ethernet and UDP:
   Ethernet.begin(mac, ip);
-  Serial.println("Ethernet initiated");
+  //Serial.println(("Ethernet initiated"));
 
-// Setzen der Digitalen Ausgänge
+  // Setzen der Digitalen Ausgänge
   pinMode(8, OUTPUT);
   digitalWrite(8, HIGH);
   pinMode(7, OUTPUT);
@@ -114,49 +115,21 @@ void setup() {
   //pinMode(1, OUTPUT);     //Wird für RS232 verwendet Monitor PC
   //digitalWrite(1,HIGH);
 
-  // 1-Wire
+  // 1-Wire starten
   sensorTemp.begin();
 
   //Timer
-  Timer1.initialize(sekunden * 1000000);
-  Timer1.attachInterrupt(timer);
+  time.every(60000, timerEvent);
 }
 
 //*****************************Helpers*********************
 
-// Zum Messen des PH-Wertes
-void phMessen()
-{
-  int buf[10], temp;
-  for(int i=0;i<10;i++)       //Get 10 sample value from the sensor for smooth the value
-  { 
-    buf[i]=analogRead(PHSensorPin); //Lesen des Sensor Pins
-    delay(10);
-  }
-  for(int i=0;i<9;i++)        //sort the analog from small to large
-  {
-    for(int j=i+1;j<10;j++)
-    {
-      if(buf[i]>buf[j])
-      {
-        temp=buf[i];
-        buf[i]=buf[j];
-        buf[j]=temp;
-      }
-    }
-  }
-  avgPHValue=0;
-  for(int i=2;i<8;i++)                      //take the average value of 6 center sample
-    avgPHValue+=buf[i];
-  phValue=(float)avgPHValue*5.0/1024/6; //convert the analog into millivolt
-  phValue=3.5*phValue;                      //convert the millivolt into pH value
-}
 
-
-void timer()
+void timerEvent()
 {
-  Serial.println("Timer");
-  sendTemp();
+  //Serial.println(("Timer"));
+  sendPoolTemp();
+  sendPlattenTemp();
   sendRelais();
 }
 
@@ -207,10 +180,10 @@ bool initUDP()
   int success;
   int ergebniss;
 
-  Serial.println("Init UDP");
+  //Serial.println(("Init UDP"));
   success = udp.beginPacket(loxone, loxonePort);
-  Serial.print("Init beginPacket: ");
-  Serial.println(success ? "success" : "failed");
+  //Serial.print(("Init beginPacket: "));
+  //Serial.println(success ? "success" : "failed");
   if (!success)
   {
     udp.stop();
@@ -219,8 +192,8 @@ bool initUDP()
   {
     ergebniss = udp.write("Init");
     success = udp.endPacket();
-    Serial.print("Init endPacket: ");
-    Serial.println(success ? "success" : "failed");
+    //Serial.print("Init endPacket: ");
+    //Serial.println(success ? "success" : "failed");
   }
 
   if (ergebniss != 0)
@@ -234,22 +207,22 @@ bool initUDP()
 }
 
 
-//Sendet aktuelle Temperatur
-bool sendTemp()
+//Sendet aktuelle Pool-Temperatur
+bool sendPoolTemp()
 {
   int success;
   int laenge;
   int ergebniss;
 
-  Serial.println("UDP_Temp");
-  String temp = "Temp_";
+  //Serial.println(("UDP_Temp_Pool"));
+  String temp = "PoolTemp_";
   temp.concat(onewire_pool_char);
   laenge = temp.length() + 1;
   char buf1[laenge];
   temp.toCharArray(buf1, laenge);
   success = udp.beginPacket(loxone, loxonePort);
-  Serial.print("Temp beginPacket: ");
-  Serial.println(success ? "success" : "failed");
+  //Serial.print(("Temp_Pool beginPacket: "));
+  //Serial.println(success ? "success" : "failed");
   if (!success)
   {
     udp.stop();
@@ -260,8 +233,48 @@ bool sendTemp()
     ergebniss = udp.write(buf1);
     success = udp.endPacket();
     udp.stop();
-    Serial.print("Temp endPacket: ");
-    Serial.println(success ? "success" : "failed");
+    //Serial.print(("Temp_Pool endPacket: "));
+    //Serial.println(success ? "success" : "failed");
+  }
+
+  if (ergebniss != 0)
+  {
+    udp.stop();
+    return true;
+  }
+
+  udp.stop();
+  return false;
+}
+
+//Sendet aktuelle Platten-Temperatur
+bool sendPlattenTemp()
+{
+  int success;
+  int laenge;
+  int ergebniss;
+
+  //Serial.println(("UDP_Temp_Platten"));
+  String temp = "PlattenTemp_";
+  temp.concat(onewire_platten_char);
+  laenge = temp.length() + 1;
+  char buf1[laenge];
+  temp.toCharArray(buf1, laenge);
+  success = udp.beginPacket(loxone, loxonePort);
+  //Serial.print(("Temp_Platten beginPacket: "));
+  //Serial.println(success ? "success" : "failed");
+  if (!success)
+  {
+    udp.stop();
+    return false;
+  }
+  else
+  {
+    ergebniss = udp.write(buf1);
+    success = udp.endPacket();
+    udp.stop();
+    //Serial.print(("Temp_Platten endPacket: "));
+    //Serial.println(success ? "success" : "failed");
   }
 
   if (ergebniss != 0)
@@ -277,18 +290,18 @@ bool sendTemp()
 //Sendet Relais Status
 bool sendRelais()
 {
-  int success;
+  bool success;
   int laenge;
   int ergebniss;
 
-  Serial.println("UDP_Relais");
+  Serial.println(("UDP_Relais"));
   String udprelais = "Relais_";
   udprelais.concat(relaisStatus);
   laenge = udprelais.length() + 1;
   char buf2[laenge];
   udprelais.toCharArray(buf2, laenge);
   success = udp.beginPacket(loxone, loxonePort);
-  Serial.print("Relais beginPacket: ");
+  Serial.print(("Relais beginPacket: "));
   Serial.println(success ? "success" : "failed");
   if (!success)
   {
@@ -300,7 +313,7 @@ bool sendRelais()
     ergebniss = udp.write(buf2);
     success = udp.endPacket();
     udp.stop();
-    Serial.print("Relais endPacket: ");
+    Serial.print(("Relais endPacket: "));
     Serial.println(success ? "success" : "failed");
   }
 
@@ -318,15 +331,15 @@ bool sendRelais()
 // Testet ob eine Zahl gesedet wird, für das Schalten der Relais
 int verify(char * string)
 {
-    int x = 0;
-    int len = strlen(string);
-    while(x < len) {
-           if(!isdigit(*(string+x)))
-           return 1;
-           ++x;
-    }
+  int x = 0;
+  int len = strlen(string);
+  while (x < len) {
+    if (!isdigit(*(string + x)))
+      return 1;
+    ++x;
+  }
 
-    return 0;
+  return 0;
 }
 
 //Lesen des UDP Streams
@@ -341,19 +354,19 @@ void readUDP()
     //finish reading this packet:
     udp.flush();
     udp.stop();
-    Serial.print("received: ");
-    Serial.println(packetBuffer);
+    //Serial.print(("received: "));
+    //Serial.println(packetBuffer);
 
     if (verify(packetBuffer) && !lockState)
     {
       int relais = atoi(packetBuffer);
       relais--;
       //passt den zähler an byte an
-      Serial.print("INT: ");
-      Serial.println(relais);
+      //Serial.print("INT: ");
+      //Serial.println(relais);
       relaisByteWriter(relais);
       relaisSwitch();
-    }  
+    }
   }
   else
   {
@@ -366,17 +379,25 @@ void readUDP()
 //Lesen der Temperatur
 void readTemperatur()
 {
-  sensorTemp.requestTemperatures(); // Temperatur 1Wire-Sensor
-  float onewire_pool_float = sensorTemp.getTempCByIndex(0); //  1Wire-Sensor (im Pool)
+  sensorTemp.requestTemperatures(); // Temperatur 1Wire-Sensoren
+ //  1Wire-Sensor (im Pool)
+  float onewire_pool_float = sensorTemp.getTempC(poolProbe);
   int onewire_pool_int = (int)(onewire_pool_float + .5); // Float in Integer wandeln mit kaufmännischer Rundung
   poolTemp = onewire_pool_int; //Gloabs setzen
   sprintf(onewire_pool_char, "%d", onewire_pool_int); // Integer in String wandeln
-  if (poolTempBuffer != poolTemp)
+  
+  float onewire_platten_float = sensorTemp.getTempC(plattenProbe);
+  int onewire_platten_int = (int)(onewire_platten_float + .5); // Float in Integer wandeln mit kaufmännischer Rundung
+  plattenTemp = onewire_platten_int; //Gloabs setzen
+  sprintf(onewire_platten_char, "%d", onewire_platten_int);
+  
+  if ((poolTempBuffer != poolTemp) || (plattenTempBuffer != plattenTemp))
   {
     poolTempBuffer = poolTemp;
+    plattenTempBuffer = plattenTemp;
     tempChange = true;
     tempSend = false;
-    Serial.println("Temp Change");
+    //Serial.println(("Temp Change"));
   }
   else
   {
@@ -402,13 +423,15 @@ void loop()
   //Senden der Temperatur
   if (((tempChange && !tempSend) || firstRunTemp) && initUDPState)
   {
-    bool successTemp = sendTemp();
-    if (successTemp)
+    bool successPoolTemp = sendPoolTemp();
+    bool successPlattenTemp = sendPlattenTemp();
+    if (successPoolTemp && successPlattenTemp)
     {
       tempSend = true;
       if (firstRunTemp)
       {
-        sendTemp(); //extra zweimal senden damit startwert vorhanden ist
+        sendPoolTemp(); //extra zweimal senden damit startwert vorhanden ist
+        sendPlattenTemp();
         firstRunTemp = false;
       }
     }
@@ -438,5 +461,5 @@ void loop()
   }
 
   readUDP(); //Lesen der Daten von Loxone
-
+  time.update();
 }
