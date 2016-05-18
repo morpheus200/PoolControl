@@ -60,10 +60,10 @@ DeviceAddress plattenProbe ={0x28, 0xFF, 0x46, 0xFC, 0x4C, 0x04, 0x00, 0xEF};
 */
 
 const /*PROGMEM*/ uint8_t mac[] = {0x90, 0xFF, 0xFF, 0x00, 0xA1, 0xAE}; //Change 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED
-const /*PROGMEM*/ IPAddress ip (192, 168, 177, 178); //Adresse des Arduino
+const /*PROGMEM*/ IPAddress ip (192, 168, 178, 100); //Adresse des Arduino
 const /*PROGMEM*/ int localPort = 8888;      // local port to listen on
 
-const /*PROGMEM*/ IPAddress loxone(192, 168, 177, 13);//Anpassen auf Loxone
+const /*PROGMEM*/ IPAddress loxone(192, 168, 178, 20);//Anpassen auf Loxone
 const /*PROGMEM*/ int loxonePort = 7000; //Port der Loxone
 
 // An EthernetUDP instance to let us send and receive packets over UDP
