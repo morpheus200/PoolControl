@@ -156,11 +156,26 @@ void relaisByteWriter(int relais) //Werte von 0-7 entsprechen 1-8 der Relais
 {
   //Serial.println(relais);
   bool bitChanged = false;
-  //Ändert den Status des Relais (An = 1 oder Aus = 0)
-  if (bitRead(relaisStatus, relais) == LOW && relais != 0 && relais <= 8)
+  //Ändert den Status des Relais (An = 11 oder Aus = 10)
+  if (/*bitRead(relaisStatus, relais) == LOW &&*/ relais != 0 && relais != 81 && relais != 80)
   {
     //Serial.println("LOW");
-    bitWrite(relaisStatus, relais, HIGH); //Relais an
+    
+    // Schaltwert identifizieren
+    int schaltwert = relais% 10;
+    // Relais identifizieren
+    int relaiswert = (relais / 10) % 10;
+    
+    if (schaltwert == 0)
+    {
+      bitWrite(relaisStatus, relaiswert, LOW);
+    }
+    else
+    {
+      bitWrite(relaisStatus, relaiswert, HIGH);
+    }
+      
+    //bitWrite(relaisStatus, relais, HIGH); //Relais an
     relaisChange = true;
     relaisSend = false;
     bitChanged = true;
