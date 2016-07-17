@@ -62,12 +62,12 @@ DeviceAddress plattenProbe = {0x28, 0xFF, 0x46, 0xFC, 0x4C, 0x04, 0x00, 0xEF}; /
 
 ////////////////////
 
-static byte myip[] = { 192, 168, 177, 175 }; //Adresse des Arduino
+static byte myip[] = { 192, 168, 178, 100 }; //Adresse des Arduino
 // gateway ip address
-static byte gwip[] = { 192, 168, 177, 1 }; //Gateway und DNS
+static byte gwip[] = { 192, 168, 178, 1 }; //Gateway und DNS
 static byte mymac[] = { 0x90, 0xFF, 0xFF, 0x00, 0xA1, 0xAE };
 byte Ethernet::buffer[700]; //Ethernet Buffer
-static byte loxone[] = { 192, 168, 177, 14 }; //Anpassen auf Loxone
+static byte loxone[] = { 192, 168, 178, 20 }; //Anpassen auf Loxone
 const int localPort = 8888;      // local port to listen on
 const int loxonePort = 7000; //Port der Loxone
 
@@ -81,7 +81,7 @@ Timer time;
 //*****************************Globale Variables***************************
 byte relaisStatus = B00000000;  //Erststatus der Relais
 int poolTemp, poolTempBuffer, plattenTemp, plattenTempBuffer = 0;  //Pool Temperatur als Int
-//uint8_t sekunden = 600;
+
 char onewire_pool_char[4];  //Pool Temperatur Char
 char onewire_platten_char[4]; // Platten Temperatur char
 bool tempChange = false; //Zeigt an wenn Temperatur sich geändert hat
@@ -195,7 +195,7 @@ void sendPoolTemp()
   laenge = temp.length() + 1;
   char buf1[laenge];
   temp.toCharArray(buf1, laenge);
-  Serial.print("Send Temp: ");
+  //Serial.print("Send Temp: ");
   Serial.println(buf1);
   
   ether.sendUdp(buf1, sizeof(buf1), localPort, loxone, loxonePort);
@@ -214,6 +214,7 @@ void sendPlattenTemp()
   laenge = temp.length() + 1;
   char buf1[laenge];
   temp.toCharArray(buf1, laenge);
+  Serial.println(buf1);
   
   ether.sendUdp(buf1, sizeof(buf1), localPort, loxone, loxonePort);
 }
@@ -231,6 +232,7 @@ bool sendRelais()
   laenge = udprelais.length() + 1;
   char buf2[laenge];
   udprelais.toCharArray(buf2, laenge);
+  Serial.println(buf2);
   
   ether.sendUdp(buf2, sizeof(buf2), localPort, loxone, loxonePort);
 }
