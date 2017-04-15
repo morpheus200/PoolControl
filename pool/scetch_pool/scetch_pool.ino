@@ -398,13 +398,27 @@ void readTemperatur()
  //  1Wire-Sensor (im Pool)
   float onewire_pool_float = sensorTemp.getTempC(poolProbe);
   int onewire_pool_int = (int)(onewire_pool_float + .5); // Float in Integer wandeln mit kaufmännischer Rundung
-  poolTemp = onewire_pool_int; //Gloabs setzen
-  sprintf(onewire_pool_char, "%d", onewire_pool_int); // Integer in String wandeln
+  if (onewire_pool_int > 40 || onewire_pool_int < 0)
+  {
+    poolTemp = poolTempBuffer;
+  }
+  else {
+    poolTemp = onewire_pool_int; //Gloabs setzen
+  }
+ 
+  sprintf(onewire_pool_char, "%d", poolTemp); // Integer in String wandeln
   
   float onewire_platten_float = sensorTemp.getTempC(plattenProbe);
   int onewire_platten_int = (int)(onewire_platten_float + .5); // Float in Integer wandeln mit kaufmännischer Rundung
-  plattenTemp = onewire_platten_int; //Gloabs setzen
-  sprintf(onewire_platten_char, "%d", onewire_platten_int);
+  if (onewire_platten_int > 60 || onewire_platten_int < 0)
+  {
+    plattenTemp = plattenTempBuffer;
+  }else
+  {
+    plattenTemp = onewire_platten_int; //Gloabs setzen
+  }
+   
+  sprintf(onewire_platten_char, "%d", plattenTemp);
   
   if ((poolTempBuffer != poolTemp) || (plattenTempBuffer != plattenTemp))
   {
